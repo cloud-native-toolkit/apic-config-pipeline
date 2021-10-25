@@ -1,0 +1,99 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: apic-post-install-config
+  annotations:
+    description: API Connect Cluster v10 post install configuration
+    app.openshift.io/description: API Connect Cluster v10 post install configuration
+    app.openshift.io/vcs-uri: https://github.com/IBM/ibm-garage-tekton-tasks
+    app.openshift.io/vcs-ref: master
+  labels:
+    version: 0.0.1
+spec:
+  description: >-
+    This task will configure your recent API Connect Cluster v10 instance installation.
+  params:
+    - name: git-apic-pipeline-git-url
+      type: string
+      description: GitHub url where the pipeline scripts are stored. These are the scripts the pipeline will execute.
+    - name: git-apic-pipeline-git-branch
+      type: string
+      default: master
+      description: Github branch for the pipeline scripts.
+    - name: source-dir
+      type: string
+      default: /source
+      description: Path where an empty directory will be mounted to which will serve as the source location for all the task steps.
+    - name: python-image
+      type: string
+      default: python:3.9.5
+      description: Python Docker image needed for executing this task.
+    - name: oc-cli-image
+      type: string
+      default: quay.io/openshift/origin-cli:latest
+      description: OpenShift CLI Docker image needed for executing oc commands.
+    - name: apic-project
+      type: string
+      default: prod
+      description: OpenShift project where your IBM API Connect Cluster v10 has been deployed into.
+    - name: debug
+      type: string
+      default: "True"
+      description: Debug flag
+  volumes:
+    - name: source
+      emptyDir: {}
+  stepTemplate:
+    volumeMounts:
+      - name: source
+        mountPath: $(params.source-dir)
+    envFrom:
+      - secretRef:
+          name: apic-pipeline-git
+      - secretRef:
+          name: apic-config-email-server
+      - secretRef:
+          name: apic-pipeline-provider-org
+    env:
+      - name: CONFIG_FILES_DIR
+        value: $(params.source-dir)/config
+  steps:
+    - name: git-clone
+      image: quay.io/ibmgaragecloud/alpine-git
+      script: |
+        set +x
+        echo "********************"
+        echo "** Step git-clone **"
+        echo "********************"
+        echo 
+        if [[ -n "${GIT_USERNAME}" ]] && [[ -n "${GIT_PRIV_TOKEN}" ]]; then
+            git clone "$(echo $(params.git-apic-pipeline-git-url) | awk -F '://' '{print $1}')://${GIT_USERNAME}:${GIT_PRIV_TOKEN}@$(echo $(params.git-apic-pipeline-git-url) | awk -F '://' '{print $2}')" $(params.source-dir)
+        else
+            git clone $(params.git-apic-pipeline-git-url) $(params.source-dir)
+        fi
+        cd $(params.source-dir)
+        git checkout $(params.git-apic-pipeline-git-branch)
+    - name: initialize-config
+      image: $(params.oc-cli-image)
+      workingDir: $(params.source-dir)
+      script: |
+        set +x
+        echo "****************************"
+        echo "** Step initialize-config **"
+        echo "****************************"
+        if [[ "$(params.debug)" == "True" ]]; then echo "DEBUG is enabled"; export DEBUG=True; fi
+        cd scripts
+        sh config.sh $(params.apic-project)
+    - name: config-apic
+      image: $(params.python-image)
+      workingDir: $(params.source-dir)
+      script: |
+        set +x
+        echo "**********************"
+        echo "** Step config-apic **"
+        echo "**********************"
+        export PYTHONWARNINGS="ignore:Unverified HTTPS request"
+        python3 -mpip install requests > /dev/null
+        if [ "$(params.debug)" = "True" ]; then echo "DEBUG is enabled"; export DEBUG=True; fi
+        cd scripts
+        python3 config_apicv10.py

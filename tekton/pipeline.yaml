@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: apic-post-install-config
+spec:
+  params:
+  tasks:
+    - name: apic-post-install-config
+      params:
+      # GitHub url where the pipeline scripts are stored. These are the scripts the pipeline will execute.
+      - name: git-apic-pipeline-git-url
+        value: 'https://github.ibm.com/techaeta/apic-config-pipeline.git'
+      # Github branch for the pipeline scripts.
+      - name: git-apic-pipeline-git-branch
+        value: 'master'
+      # Debug flag
+      - name: debug
+        value: "True"
+      taskRef:
+        name: apic-post-install-config
