@@ -10,6 +10,8 @@ API Connect v10 post install configuration steps --> https://www.ibm.com/docs/en
 
 FILE_NAME = "config_apicv10.py"
 DEBUG = os.getenv('DEBUG','')
+# This is the default out of the box catalog that gets created when a Provider Organization is created.
+catalog_name = "sandbox"
 
 def info(step):
     return "[INFO]["+ FILE_NAME +"][STEP " + str(step) + "] - " 
@@ -392,12 +394,15 @@ try:
 
     url = 'https://' + environment_config["APIC_ADMIN_URL"] + '/api/cloud/orgs'
 
+    # Compute the name of the Provider Organization from the title
+    po_name=os.environ["PROV_ORG_TITLE"].strip().replace(" ","-")
+
     # Create the data object
     # Ideally this should be loaded from a sealed secret.
     # Using defaults for now.
     data = {}
     data['title'] = os.environ["PROV_ORG_TITLE"]
-    data['name'] = os.environ["PROV_ORG_NAME"]
+    data['name'] = po_name.lower()
     data['owner_url'] = owner_url
 
     if DEBUG:
@@ -423,8 +428,8 @@ try:
     # in the previous step 10 when registering the new user for the provider organization owner)
     # Using defaults for now.
     admin_bearer_token = api_calls.get_bearer_token(environment_config["APIC_API_MANAGER_URL"],
-                                                    "testorgadmin",
-                                                    "passw0rd",
+                                                    os.environ["PROV_ORG_OWNER_USERNAME"],
+                                                    os.environ["PROV_ORG_OWNER_PASSWORD"],
                                                     "provider/default-idp-2",
                                                     toolkit_credentials["toolkit"]["client_id"],
                                                     toolkit_credentials["toolkit"]["client_secret"])
@@ -471,7 +476,7 @@ try:
     if response.status_code != 200:
           raise Exception("Return code for getting the Sandbox catalog ID isn't 200. It is " + str(response.status_code))
     for catalog in response.json()['results']:
-        if catalog['name'] == os.environ["PROV_ORG_CATALOG_NAME"]:
+        if catalog['name'] == catalog_name:
             found = True
             catalog_id = catalog['id']
     if not found:
